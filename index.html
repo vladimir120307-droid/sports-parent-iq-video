@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Sports Parent IQ - Interactive Sample</title>
+<style>
+  :root { --ink:#0d1b2a; --red:#e23d28; --yellow:#f5c518; --green:#2fbf71; --white:#fff; --glass:rgba(10,18,30,.62); color-scheme: dark; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin:0; height:100%; background:#05080d; color:var(--white);
+    font-family:"Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif; }
+  body { display:flex; align-items:center; justify-content:center; }
+
+  .stage { position:relative; isolation:isolate; width:min(100vw, calc(100vh * 9 / 16)); height:min(100vh, calc(100vw * 16 / 9)); overflow:hidden; background:#000; }
+  @media (min-width:600px) { .stage { border-radius:22px; box-shadow:0 20px 80px rgba(0,0,0,.6); } }
+  @media (max-width:599px) { .stage { width:100vw; height:100vh; height:100dvh; } }
+  /* clips are stacked; the one on top is the one showing (see the pool in the script) */
+  .vid { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:0; }
+  .vid.on { z-index:1; }
+
+  /* placeholder scene for moments without a clip yet */
+  .slotbg { position:absolute; inset:0; opacity:0; transition:opacity .45s; z-index:2; }
+  .slotbg.show { opacity:1; }
+  .slotbg[data-tone="morning"] { background:linear-gradient(165deg,#ffd59a 0%,#ff9f68 40%,#4d8fcf 100%); }
+  .slotbg[data-tone="day"]     { background:linear-gradient(165deg,#9bd3ff 0%,#4f93d9 45%,#2c6b3c 100%); }
+  .slotbg[data-tone="dusk"]    { background:linear-gradient(165deg,#ff9a6b 0%,#7b4b8f 52%,#1d2340 100%); }
+  .slotbg[data-tone="night"]   { background:linear-gradient(165deg,#24305f 0%,#0b1022 60%,#05070f 100%); }
+  .frame { position:absolute; left:9%; right:9%; top:17%; height:36%; border:3px dashed rgba(255,255,255,.75); border-radius:22px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:16px;
+    background:rgba(0,0,0,.18); backdrop-filter:blur(2px); -webkit-backdrop-filter:blur(2px); }
+  .frame .play { width:54px; height:54px; border-radius:50%; background:rgba(255,255,255,.92); color:var(--ink);
+    display:grid; place-items:center; font-size:22px; margin-bottom:10px; }
+  .frame .lbl { font-size:11px; letter-spacing:.18em; font-weight:900; opacity:.9; }
+  .frame .desc { font-size:16px; font-weight:800; line-height:1.3; margin-top:6px; }
+  .frame .meta { font-size:11px; opacity:.75; margin-top:8px; font-weight:700; }
+
+  /* HUD */
+  .hud { position:absolute; top:0; left:0; right:0; padding:12px 14px 24px; display:flex; align-items:flex-start; justify-content:space-between; gap:10px;
+    background:linear-gradient(to bottom, rgba(0,0,0,.6), rgba(0,0,0,0)); z-index:5; }
+  .brand { font-weight:900; letter-spacing:.06em; font-size:13px; line-height:1.1; }
+  .brand small { display:block; font-weight:800; opacity:.78; letter-spacing:.1em; font-size:10px; margin-top:3px; }
+  .pips { display:flex; gap:5px; margin-top:7px; }
+  .pips i { width:18px; height:5px; border-radius:4px; background:rgba(255,255,255,.28); }
+  .pips i.done { background:#fff; } .pips i.now { background:var(--yellow); }
+  .iq { text-align:right; min-width:120px; }
+  .iq .lbl { font-size:10px; letter-spacing:.12em; opacity:.8; font-weight:800; }
+  .iq .num { font-size:26px; font-weight:900; line-height:1; transition:color .3s; }
+  .iq .bar { height:6px; border-radius:6px; background:rgba(255,255,255,.22); margin-top:5px; overflow:hidden; }
+  .iq .fill { height:100%; width:50%; background:var(--yellow); border-radius:6px; transition:width .6s cubic-bezier(.2,.8,.2,1), background .3s; }
+  .delta { position:absolute; right:18px; top:76px; font-weight:900; font-size:30px; opacity:0; z-index:6; text-shadow:0 2px 10px rgba(0,0,0,.6); }
+  .delta.show { animation:floatUp 1.4s ease-out forwards; }
+  @keyframes floatUp { 0%{opacity:0;transform:translateY(14px) scale(.8)} 15%{opacity:1;transform:translateY(0) scale(1.1)} 80%{opacity:1} 100%{opacity:0;transform:translateY(-26px)} }
+
+  /* chapter card */
+  .chapter { position:absolute; left:16px; right:16px; top:30%; z-index:6; text-align:center; opacity:0; transform:translateY(12px) scale(.98);
+    transition:opacity .35s, transform .35s; pointer-events:none; }
+  .chapter.show { opacity:1; transform:none; }
+  .chapter .ct { font-size:13px; font-weight:900; letter-spacing:.2em; color:var(--yellow); text-shadow:0 2px 12px rgba(0,0,0,.7); }
+  .chapter .cn { font-size:40px; font-weight:900; line-height:1; margin:6px 0 8px; text-shadow:0 4px 24px rgba(0,0,0,.75); }
+  .chapter .cs { display:inline-block; font-size:15px; font-weight:700; line-height:1.35; background:var(--glass); padding:10px 14px; border-radius:14px; max-width:340px;
+    backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); }
+
+  .caption { position:absolute; left:14px; right:14px; bottom:26px; z-index:5; background:var(--glass); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+    border-radius:14px; padding:12px 14px; font-weight:800; font-size:16px; line-height:1.3; opacity:0; transform:translateY(10px); transition:opacity .35s, transform .35s; }
+  .caption.show { opacity:1; transform:none; }
+
+  /* choices */
+  .choices { position:absolute; left:0; right:0; bottom:0; z-index:7; padding:18px 14px 20px;
+    background:linear-gradient(to top, rgba(5,10,18,.95) 66%, rgba(5,10,18,0)); transform:translateY(105%); transition:transform .4s cubic-bezier(.2,.8,.2,1); }
+  .choices.show { transform:none; }
+  .qrow { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px; }
+  .q { font-size:19px; font-weight:900; line-height:1.15; }
+  .clock { position:relative; width:56px; height:56px; flex:0 0 56px; }
+  .clock svg { transform:rotate(-90deg); }
+  .clock .t { position:absolute; inset:0; display:grid; place-items:center; font-weight:900; font-size:21px; }
+  .opt { width:100%; display:flex; align-items:center; gap:11px; text-align:left; border:0; cursor:pointer; margin-top:8px; padding:11px 13px; border-radius:14px;
+    background:rgba(255,255,255,.95); color:var(--ink); font:inherit; font-weight:800; font-size:15px; line-height:1.25; transition:transform .12s, background .2s, opacity .2s; }
+  .opt:active { transform:scale(.98); }
+  .opt .k { flex:0 0 28px; height:28px; border-radius:9px; display:grid; place-items:center; background:var(--ink); color:#fff; font-weight:900; }
+  .opt.picked { background:var(--yellow); } .opt.dim { opacity:.35; }
+
+  .stamp { position:absolute; left:50%; top:36%; z-index:8; padding:18px 28px; border-radius:16px; font-weight:900; font-size:40px; letter-spacing:.04em; color:#fff; text-align:center;
+    transform:translate(-50%,-50%) rotate(-8deg) scale(.2); opacity:0; box-shadow:0 12px 40px rgba(0,0,0,.45); border:4px solid rgba(255,255,255,.9); }
+  .stamp small { display:block; font-size:14px; letter-spacing:.14em; opacity:.9; margin-bottom:2px; }
+  .stamp.red { background:var(--red); } .stamp.yellow { background:var(--yellow); color:var(--ink); } .stamp.green { background:var(--green); }
+  .stamp.show { animation:slam .45s cubic-bezier(.2,1.6,.4,1) forwards; }
+  @keyframes slam { to { transform:translate(-50%,-50%) rotate(-8deg) scale(1); opacity:1; } }
+
+  /* screens */
+  .screen { position:absolute; inset:0; z-index:9; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:26px 20px; text-align:center;
+    background:rgba(5,10,18,.72); backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); transition:opacity .4s; overflow-y:auto; }
+  .screen.hidden { opacity:0; pointer-events:none; }
+  .kicker { font-size:12px; letter-spacing:.18em; font-weight:900; opacity:.85; }
+  .title { font-size:32px; font-weight:900; line-height:1.07; margin:10px 0 12px; }
+  .lead { font-size:15px; line-height:1.42; opacity:.92; max-width:330px; }
+  .bigbtn { margin-top:24px; border:0; cursor:pointer; padding:16px 30px; border-radius:999px; font:inherit; font-weight:900; font-size:18px; background:var(--yellow); color:var(--ink);
+    box-shadow:0 10px 30px rgba(245,197,24,.35); }
+  .note { margin-top:18px; font-size:11px; opacity:.6; max-width:320px; line-height:1.4; }
+
+  .result { background:rgba(5,10,18,.55); }
+  .revealslot { width:100%; max-width:360px; border:3px dashed rgba(255,255,255,.7); border-radius:18px; padding:12px; font-size:13px; font-weight:800; margin-bottom:12px;
+    background:rgba(0,0,0,.25); }
+  .card { width:100%; max-width:360px; background:#fff; color:var(--ink); border-radius:22px; padding:20px 18px 16px; text-align:left; box-shadow:0 18px 60px rgba(0,0,0,.5);
+    transform:translateY(20px) scale(.97); opacity:0; transition:transform .45s, opacity .45s; }
+  .screen.show-card .card { transform:none; opacity:1; }
+  .sub { font-size:12px; font-weight:900; letter-spacing:.12em; opacity:.55; }
+  .type { font-size:30px; font-weight:900; line-height:1.02; margin:6px 0 4px; }
+  .type.bad { color:var(--red); } .type.good { color:var(--green); }
+  .score { display:flex; align-items:baseline; gap:8px; margin:12px 0 4px; }
+  .score b { font-size:44px; line-height:1; } .score span { font-weight:800; opacity:.6; }
+  .card p { margin:5px 0; font-size:14px; line-height:1.35; }
+  .card p.line { font-size:15px; font-weight:800; margin-bottom:8px; }
+  .row { display:flex; gap:8px; margin-top:12px; }
+  .btn { flex:1; border:0; cursor:pointer; padding:12px 10px; border-radius:12px; font:inherit; font-weight:800; font-size:14px; }
+  .btn.dark { background:var(--ink); color:#fff; } .btn.line { background:#fff; color:var(--ink); border:2px solid var(--ink); }
+  form { margin-top:12px; border-top:1px dashed rgba(13,27,42,.2); padding-top:12px; }
+  form label.h { display:block; font-weight:900; font-size:14px; margin-bottom:7px; }
+  .erow { display:flex; gap:8px; }
+  input[type=email] { flex:1; min-width:0; padding:11px 12px; border-radius:11px; border:2px solid rgba(13,27,42,.18); font:inherit; font-size:15px; color:var(--ink); background:#fff; }
+  .consent { display:flex; gap:8px; align-items:flex-start; font-size:12px; margin-top:8px; opacity:.8; text-align:left; }
+  .ok { display:none; font-weight:800; color:var(--green); margin-top:10px; }
+  .again { margin-top:14px; background:transparent; color:#fff; border:2px solid rgba(255,255,255,.6); border-radius:999px; padding:10px 22px; font:inherit; font-weight:800; cursor:pointer; }
+
+  @media (prefers-reduced-motion: reduce) { * { animation-duration:.01ms !important; transition-duration:.01ms !important; } }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <div class="slotbg" id="slotbg">
+    <div class="frame">
+      <div class="play">▶</div>
+      <div class="lbl">YOUR CLIP PLAYS HERE</div>
+      <div class="desc" id="slotDesc"></div>
+      <div class="meta">Pixar-style · vertical 9:16 · about 6 seconds</div>
+    </div>
+  </div>
+
+  <div class="hud">
+    <div class="brand">SPORTS PARENT IQ<small id="hudMoment">GAME DAY</small><div class="pips" id="pips"></div></div>
+    <div class="iq"><div class="lbl">SIDELINE IQ</div><div class="num" id="iqNum">100</div><div class="bar"><div class="fill" id="iqFill"></div></div></div>
+  </div>
+  <div class="delta" id="delta"></div>
+
+  <div class="chapter" id="chapter"><div class="ct" id="chT"></div><div class="cn" id="chN"></div><div class="cs" id="chS"></div></div>
+  <div class="caption" id="caption"></div>
+
+  <div class="choices" id="choices">
+    <div class="qrow">
+      <div class="q" id="q"></div>
+      <div class="clock">
+        <svg width="56" height="56" viewBox="0 0 56 56">
+          <circle cx="28" cy="28" r="24" fill="rgba(255,255,255,.12)" stroke="rgba(255,255,255,.18)" stroke-width="5" />
+          <circle id="ring" cx="28" cy="28" r="24" fill="none" stroke="#f5c518" stroke-width="5" stroke-linecap="round" stroke-dasharray="150.8" stroke-dashoffset="0" />
+        </svg>
+        <div class="t" id="clockT"></div>
+      </div>
+    </div>
+    <div id="opts"></div>
+  </div>
+
+  <div class="stamp" id="stamp"></div>
+
+  <div class="screen" id="start">
+    <div class="kicker">KSNN · SPORTS PARENT IQ</div>
+    <div class="title">One Saturday.<br>Five moments.<br>Who are you on the sideline?</div>
+    <div class="lead">Every answer moves your Sideline IQ, and the shot clock is running. <span id="clipLine">Moment 3 runs on KSNN's own clip; the other four show where their clips go.</span></div>
+    <button class="bigbtn" id="playBtn">▶ Tap to play</button>
+    <div class="note">Sound on · Interactive sample · all questions, scores and clips live in one content file</div>
+  </div>
+
+  <div class="screen result hidden" id="result">
+    <div class="revealslot" id="revealSlot"></div>
+    <div class="card">
+      <div class="sub">YOUR SIDELINE TYPE</div>
+      <div class="type" id="rType"></div>
+      <div class="sub" id="rBand"></div>
+      <div class="score"><b id="rIq"></b><span>SIDELINE IQ</span></div>
+      <p class="line" id="rLine"></p>
+      <p><b>Your superpower:</b> <span id="rPlus"></span></p>
+      <p><b>Watch out:</b> <span id="rWatch"></span></p>
+      <div class="row">
+        <button class="btn dark" id="shareBtn">Share my card</button>
+        <button class="btn line" id="challengeBtn">Challenge a parent</button>
+      </div>
+      <form id="emailForm" novalidate>
+        <label class="h" for="email" id="playbookLbl">Get your Parent Playbook</label>
+        <div class="erow"><input id="email" type="email" placeholder="your@email.com" autocomplete="email" /><button class="btn dark" type="submit" style="flex:0 0 auto">Send</button></div>
+        <label class="consent"><input type="checkbox" id="consent" /> I agree to get the Playbook and KSNN updates. Unsubscribe anytime.</label>
+        <div class="ok" id="ok">Done. Your Playbook is on its way.</div>
+      </form>
+    </div>
+    <button class="again" id="again">↺ Play again</button>
+  </div>
+</div>
+
+<script src="content.js"></script>
+<script>
+(() => {
+  "use strict";
+  const G = window.GAME, $ = (id) => document.getElementById(id);
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const st = { iq: G.baseIQ, tally: {}, order: [], busy: false, loopStop: null };
+
+  /* ---------- HUD ---------- */
+  function setIQ(value) {
+    st.iq = value;
+    $('iqNum').textContent = value;
+    const pct = Math.max(0, Math.min(100, (value - 60) / 80 * 100));   // 60..140 maps to the bar
+    const fill = $('iqFill');
+    fill.style.width = pct + '%';
+    fill.style.background = value < 84 ? 'var(--red)' : value < 100 ? 'var(--yellow)' : 'var(--green)';
+    $('iqNum').style.color = value < 84 ? 'var(--red)' : '#fff';
+  }
+  function pips(i) {
+    $('pips').innerHTML = G.moments.map((_, k) => '<i class="' + (k < i ? 'done' : k === i ? 'now' : '') + '"></i>').join('');
+    $('hudMoment').textContent = 'MOMENT ' + (i + 1) + ' / ' + G.moments.length;
+  }
+  function caption(text) { const c = $('caption'); if (!text) { c.classList.remove('show'); return; } c.textContent = text; c.classList.add('show'); }
+  function popDelta(d) {
+    const el = $('delta');
+    el.textContent = (d > 0 ? '+' : '') + d;
+    el.style.color = d > 0 ? 'var(--green)' : d <= -6 ? 'var(--red)' : 'var(--yellow)';
+    el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  }
+
+  /* ---------- video ----------
+   * Clips live in a small pool of stacked <video> elements. A clip loads and cues in a hidden
+   * element and only then moves to the top, so a cut from one file to the next never flashes
+   * black. The pool is unlocked on the first tap: iOS wants a tap before it lets a video with
+   * sound start by itself later. A clip that is missing or broken just reports false, and the
+   * moment falls back to its clip-slot card. */
+  const pool = [];
+  for (let k = 0; k < 6; k++) {
+    const el = document.createElement('video');
+    el.className = 'vid';
+    el.preload = 'auto';
+    el.playsInline = true;
+    el.setAttribute('playsinline', '');
+    el.setAttribute('webkit-playsinline', '');
+    el.used = 0;
+    $('stage').insertBefore(el, $('slotbg'));
+    pool.push(el);
+  }
+  let top = pool[0];
+  top.classList.add('on');
+
+  // The element that holds this clip; a new clip goes into the least recently used spare.
+  function holder(src) {
+    let el = pool.find((e) => e.dataset.src === src);
+    if (!el) {
+      el = pool.filter((e) => e !== top).sort((a, b) => a.used - b.used)[0];
+      el.pause();
+      el.dataset.src = src;
+      el.src = src;
+      el.load();
+    }
+    el.used = performance.now();
+    return el;
+  }
+  // true once the clip's metadata is in; false if the file is missing, broken or never arrives.
+  function ready(el) {
+    return new Promise((resolve) => {
+      if (el.error) return resolve(false);
+      if (el.readyState >= 1) return resolve(true);
+      let timer;
+      const end = (ok) => { clearTimeout(timer); el.removeEventListener('loadedmetadata', yes); el.removeEventListener('error', no); resolve(ok); };
+      const yes = () => end(true), no = () => end(false);
+      el.addEventListener('loadedmetadata', yes);
+      el.addEventListener('error', no);
+      timer = setTimeout(() => end(el.readyState >= 1), 10000);
+    });
+  }
+  function seek(el, t) {
+    return new Promise((resolve) => {
+      let timer;
+      const done = () => { clearTimeout(timer); el.removeEventListener('seeked', done); resolve(); };
+      el.addEventListener('seeked', done);
+      timer = setTimeout(done, 4000);          // a stalled seek must not hang the game
+      el.currentTime = t;
+    });
+  }
+  function raise(el) {
+    if (el === top) return;
+    el.classList.add('on');
+    top.classList.remove('on');
+    top.pause();
+    top = el;
+  }
+  // Cue a clip at `from` and cut to it. Returns its element, or null when the clip isn't there.
+  async function cue(src, from) {
+    const el = holder(src);
+    if (!(await ready(el))) return null;
+    await seek(el, from || 0);
+    raise(el);
+    return el;
+  }
+  // Play [a, b] of el; with no b it plays to the end and leaves the last frame up. Frame-accurate
+  // via requestAnimationFrame, with 'timeupdate' as the fallback when the browser throttles
+  // animation frames (backgrounded tab, dimmed screen). If sound is refused, it plays muted.
+  function playSeg(el, seg) {
+    const a = seg[0] || 0, b = seg[1] != null ? seg[1] : Infinity;
+    return new Promise(async (resolve) => {
+      let done = false;
+      const finish = () => { if (done) return; done = true; el.pause(); el.removeEventListener('timeupdate', check); el.removeEventListener('ended', finish); resolve(); };
+      const check = () => { if (el.currentTime >= b || el.ended) finish(); };
+      const tick = () => { if (done) return; check(); if (!done) requestAnimationFrame(tick); };
+      await seek(el, a);
+      el.addEventListener('timeupdate', check);
+      el.addEventListener('ended', finish);
+      el.play().catch(() => { el.muted = true; el.play().catch(finish); });
+      requestAnimationFrame(tick);
+    });
+  }
+  function loopSeg(el, seg) {
+    let stop = false;
+    (async () => { while (!stop) await playSeg(el, seg); })();
+    return () => { stop = true; el.pause(); };
+  }
+  let unlocked = false;
+  function unlock() {                          // must run inside the tap handler
+    if (unlocked) return;
+    unlocked = true;
+    for (const el of pool) { const p = el.play(); if (p) p.catch(() => {}); el.pause(); }
+  }
+
+  /* ---------- scenes ---------- */
+  function showSlot(m) {
+    const bg = $('slotbg');
+    if (!m) { bg.classList.remove('show'); return; }
+    bg.dataset.tone = m.tone || 'day';
+    $('slotDesc').textContent = m.slot || '';
+    bg.classList.add('show');
+  }
+  async function chapter(m, i, ms) {
+    $('chT').textContent = m.time + ' · ' + m.where.toUpperCase();
+    $('chN').textContent = m.title;
+    $('chS').textContent = m.setup;
+    $('chapter').classList.add('show');
+    await wait(ms);
+    $('chapter').classList.remove('show');
+    await wait(250);
+  }
+
+  /* ---------- question ---------- */
+  function ask(m) {
+    return new Promise((resolve) => {
+      $('q').textContent = m.q;
+      $('opts').innerHTML = m.a.map((a, k) => '<button class="opt" data-k="' + k + '"><span class="k">' + 'ABCD'[k] + '</span>' + esc(a.t) + '</button>').join('');
+      const secs = m.shotClock || G.shotClock, ring = $('ring'), C = 150.8, t0 = performance.now();
+      let settled = false;
+      const settle = (idx, timedOut) => {
+        if (settled) return; settled = true; clearInterval(timer);
+        document.querySelectorAll('.opt').forEach((b) => b.classList.add(Number(b.dataset.k) === idx ? 'picked' : 'dim'));
+        setTimeout(() => { $('choices').classList.remove('show'); resolve({ idx, timedOut }); }, 420);
+      };
+      const timer = setInterval(() => {
+        const left = Math.max(0, secs - (performance.now() - t0) / 1000);
+        $('clockT').textContent = Math.ceil(left);
+        ring.style.strokeDashoffset = String(C * (1 - left / secs));
+        ring.style.stroke = left < 3 ? '#e23d28' : '#f5c518';
+        if (left <= 0) settle(m.timeoutPick != null ? m.timeoutPick : -1, true);
+      }, 100);
+      $('clockT').textContent = secs; ring.style.strokeDashoffset = '0'; ring.style.stroke = '#f5c518';
+      document.querySelectorAll('.opt').forEach((b) => b.addEventListener('click', () => settle(Number(b.dataset.k), false)));
+      $('choices').classList.add('show');
+    });
+  }
+
+  function stamp(s) {
+    const el = $('stamp');
+    el.className = 'stamp ' + s.cls;
+    el.innerHTML = '<small>' + esc(s.sub) + '</small>' + esc(s.label);
+    void el.offsetWidth; el.classList.add('show');
+  }
+
+  /* ---------- one moment ---------- */
+  async function moment(i) {
+    const m = G.moments[i];
+    pips(i);
+    const segs = m.setupSegs || [[0]];                          // no segments: the whole file
+    const el = m.clip ? await cue(m.clip, segs[0][0]) : null;
+    if (el) {
+      showSlot(null);
+      for (const a of m.a) if (a.clip) holder(a.clip);         // answer clips load while the setup plays
+      await chapter(m, i, 2600);
+      for (const seg of segs) await playSeg(el, seg);          // stops on the frame the question sits on
+    } else {
+      showSlot(m);
+      await chapter(m, i, 3000);
+    }
+    const pick = await ask(m);
+    const ans = pick.idx >= 0 ? m.a[pick.idx] : G.timeout;
+    st.tally[ans.type] = (st.tally[ans.type] || 0) + 1;
+    st.order.push(ans.type);
+    setIQ(st.iq + ans.iq);
+    const line = pick.timedOut && m.timeoutQuip ? m.timeoutQuip : ans.quip;
+    // The answer plays its own clip, or its segment of the moment's clip, when it has one.
+    const shot = !el ? null : ans.clip ? { src: ans.clip, seg: ans.seg || [0] } : ans.seg ? { src: m.clip, seg: ans.seg } : null;
+    const sel = shot && await cue(shot.src, shot.seg[0]);
+    if (sel) {
+      caption(line);
+      const p = playSeg(sel, shot.seg);
+      setTimeout(() => { if (ans.stamp) { stamp(ans.stamp); whistle(ans.stamp.cls === 'red'); } popDelta(ans.iq); }, 380);
+      await p;
+      $('stamp').className = 'stamp';
+      $('stamp').innerHTML = '';
+    } else {
+      popDelta(ans.iq);
+      caption(line);
+      await wait(2000);
+    }
+    caption('');
+  }
+
+  /* ---------- result ---------- */
+  function finalType() {
+    let best = null, bestN = -1;
+    for (const t of Object.keys(st.tally)) {
+      const n = st.tally[t];
+      const later = st.order.lastIndexOf(t) > st.order.lastIndexOf(best);
+      if (n > bestN || (n === bestN && later)) { best = t; bestN = n; }
+    }
+    return best;
+  }
+  async function result() {
+    pips(G.moments.length);
+    $('hudMoment').textContent = 'FINAL WHISTLE';
+    showSlot(null);
+    const key = finalType(), T = G.types[key];
+    const band = G.bands.find((b) => st.iq >= b.min);
+    const good = ['cheerleader', 'supporter', 'balance', 'teamplayer', 'grateful'].includes(key);
+    $('rType').textContent = T.name;
+    $('rType').className = 'type ' + (good ? 'good' : 'bad');
+    $('rBand').textContent = band.label.toUpperCase();
+    $('rIq').textContent = st.iq;
+    $('rLine').textContent = T.line;
+    $('rPlus').textContent = T.plus;
+    $('rWatch').textContent = T.watch;
+    $('playbookLbl').textContent = 'Get the ' + T.name.replace(/^The /, '') + ' Parent Playbook';
+    const slot = $('revealSlot');
+    const rev = T.reveal && await cue(T.reveal.clip, T.reveal.seg[0]);
+    if (rev) {
+      slot.style.display = 'none';
+      rev.muted = true;
+      st.loopStop = loopSeg(rev, T.reveal.seg);
+    } else {
+      slot.style.display = 'block';
+      slot.textContent = '▶ ' + T.name + ' reveal clip plays here, walking out in Pixar style';
+      top.pause();
+      showSlot({ tone: 'night', slot: '' });
+      document.querySelector('#slotbg .frame').style.display = 'none';
+    }
+    const r = $('result');
+    r.classList.remove('hidden');
+    requestAnimationFrame(() => r.classList.add('show-card'));
+  }
+
+  /* ---------- run ---------- */
+  async function run() {
+    if (st.busy) return; st.busy = true;
+    if (st.loopStop) { st.loopStop(); st.loopStop = null; }
+    pool.forEach((el) => { el.muted = false; });
+    document.querySelector('#slotbg .frame').style.display = '';
+    st.tally = {}; st.order = []; setIQ(G.baseIQ);
+    $('ok').style.display = 'none';
+    $('result').classList.add('hidden'); $('result').classList.remove('show-card');
+    $('start').classList.add('hidden');
+    for (let i = 0; i < G.moments.length; i++) await moment(i);
+    await result();
+    st.busy = false;
+  }
+
+  /* ---------- sound: a short synthesized referee whistle ---------- */
+  let ac = null;
+  function whistle(long) {
+    try {
+      ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+      const t = ac.currentTime, o = ac.createOscillator(), lfo = ac.createOscillator(), lg = ac.createGain(), g = ac.createGain();
+      o.type = 'sine'; o.frequency.value = 2900; lfo.frequency.value = 38; lg.gain.value = 140;
+      lfo.connect(lg).connect(o.frequency); o.connect(g).connect(ac.destination);
+      const dur = long ? 0.6 : 0.22;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.16, t + 0.02);
+      g.gain.setValueAtTime(0.16, t + dur - 0.05); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.start(t); lfo.start(t); o.stop(t + dur + 0.02); lfo.stop(t + dur + 0.02);
+    } catch (_) {}
+  }
+
+  /* ---------- result actions (demo: nothing leaves the page) ---------- */
+  const shareText = () => "I'm " + $('rType').textContent + " with a Sideline IQ of " + st.iq + ". Beat that.";
+  $('shareBtn').addEventListener('click', async () => {
+    try { if (navigator.share) { await navigator.share({ title: 'Sports Parent IQ', text: shareText() }); return; } } catch (_) {}
+    try { await navigator.clipboard.writeText(shareText()); $('shareBtn').textContent = 'Copied!'; } catch (_) {}
+  });
+  $('challengeBtn').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(shareText() + ' (challenge link goes here)'); $('challengeBtn').textContent = 'Link copied'; } catch (_) {}
+  });
+  $('emailForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const email = $('email').value.trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { $('email').focus(); $('email').style.borderColor = 'var(--red)'; return; }
+    if (!$('consent').checked) { $('consent').focus(); return; }
+    $('email').style.borderColor = ''; $('ok').style.display = 'block';
+  });
+
+  /* ---------- start screen: say which moments already run on video ---------- */
+  function clipLine(have) {                    // have: 1-based numbers of moments whose clip is in place
+    const rest = G.moments.length - have.length, words = ['no', 'one', 'two', 'three', 'four', 'five', 'six'];
+    if (!have.length) return 'Each moment shows where its clip goes.';
+    if (!rest) return 'Every moment plays out on video.';
+    const parts = have.map((n, j) => (j ? 'moment ' + n + ' on ' : 'Moment ' + n + ' runs on ') + (G.moments[n - 1].credit || 'video'));
+    const head = parts.length > 1 ? parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1] : parts[0];
+    return head + '; the other ' + (words[rest] || rest) + (rest === 1 ? ' shows where its clip goes.' : ' show where their clips go.');
+  }
+  async function introLine() {
+    const have = [];
+    for (let k = 0; k < G.moments.length; k++) {
+      if (!G.moments[k].clip) continue;
+      try { if ((await fetch(G.moments[k].clip, { method: 'HEAD' })).ok) have.push(k + 1); }
+      catch (_) { return; }                    // opened from disk: keep the line in the page
+    }
+    $('clipLine').textContent = clipLine(have);
+  }
+
+  const start = () => { unlock(); run(); };
+  $('playBtn').addEventListener('click', start);
+  $('again').addEventListener('click', start);
+  setIQ(G.baseIQ); pips(0); $('hudMoment').textContent = 'GAME DAY';
+  const first = G.moments.find((m) => m.clip);
+  if (first) cue(first.clip, (first.setupSegs || [[0]])[0][0]);   // poster frame behind the start screen
+  introLine();
+})();
+</script>
+</body>
+</html>
