@@ -9,18 +9,27 @@
  * picked answer plays either its `seg` of the same file or its own `clip`.
  * A moment without a clip, or whose clip file isn't there yet, shows a
  * "clip slot" card describing the shot instead, so the game always plays
- * through. New clips go in clips/ under the names listed below; nothing in
- * index.html needs to change.
+ * through. A moment with a `still` and no video shows that storyboard frame
+ * instead of the card. `live` gives a moment a second, live-action set of
+ * clips (null answers keep their line over the frozen frame). The host clips,
+ * storyboard frames and type portraits are optional too: whatever file isn't
+ * there yet is simply skipped. New files go in clips/, stills/ and types/
+ * under the names listed below; nothing in index.html needs to change.
  */
 window.GAME = {
   baseIQ: 100,
   shotClock: 10,            // seconds per question (a moment can override)
+
+  intro:   { clip: "clips/host_intro.mp4" },     // the host opens the show (first run only)
+  verdict: { clip: "clips/host_verdict.mp4" },   // the host builds up the result, then the type lands
+  portraits: "types/{key}.jpg",                  // one square portrait per parent type, by type key
 
   moments: [
     {
       time: "7:42 AM", title: "Snack Duty", where: "Saturday morning", tone: "morning",
       setup: "The team arrives in 18 minutes. The group chat is already asking.",
       slot: "A parent walks up with the snack cooler and twelve kids swarm it.",
+      still: "stills/m1.jpg",
       q: "Snack duty is yours. You...",
       a: [
         { t: "Bring orange slices and remember the kid with the allergy.", type: "teamplayer", iq: 6, quip: "Legend behavior. Orange slices forever." },
@@ -33,6 +42,7 @@ window.GAME = {
       time: "2:15 PM", title: "The Bench", where: "Semifinal", tone: "day",
       setup: "Second half. Your kid hasn't left the bench. Twelve parents are watching you watch.",
       slot: "Your kid on the bench, you in the bleachers, staring at the coach.",
+      still: "stills/m2.jpg",
       q: "Where are your eyes?",
       a: [
         { t: "On the coach. We need to discuss minutes.", type: "control", iq: -8, quip: "Your calendar invite has been declined." },
@@ -64,6 +74,7 @@ window.GAME = {
       setup: "They lost 2 to 1. The field is empty and one light is still on. Halfway to the car, very quietly:",
       slot: "Empty field at dusk, one light on, your kid stops walking.",
       clip: "clips/m4_setup.mp4", credit: "new clips of the same characters",   // plays whole, ends on the question frame
+      live: { clip: "clips/real_setup.mp4", a: ["clips/real_a.mp4", null, "clips/real_c.mp4", null] },
       q: "\"I think I might want to quit.\" Your first words?",
       a: [
         { t: "\"After everything we've paid for?\"", type: "rager", iq: -8, clip: "clips/m4_a.mp4", quip: "Oof. The invoice has entered the chat." },
@@ -76,12 +87,13 @@ window.GAME = {
       time: "8:11 PM", title: "The Ride Home", where: "Twelve minutes to go", tone: "night",
       setup: "The back seat is very quiet. Somebody has to pick what's playing.",
       slot: "Back seat at night, your kid slowly puts on headphones.",
+      clip: "clips/m5_setup.mp4", credit: "new clips of the same characters",
       q: "What's playing on the ride home?",
       a: [
-        { t: "Me, breaking down the second half.", type: "carcoach", iq: -8, quip: "Fun fact: the back seat has no exit." },
-        { t: "Whatever they pick. We're stopping for fries.", type: "balance", iq: 8, quip: "Fries: undefeated since forever." },
-        { t: "A list of what the coach got wrong.", type: "control", iq: -6, quip: "The coach would love your notes. No, really." },
-        { t: "\"I loved watching you play.\" Then quiet.", type: "grateful", iq: 8, quip: "Six words. Best thing said all day." }
+        { t: "Me, breaking down the second half.", type: "carcoach", iq: -8, clip: "clips/m5_a.mp4", quip: "Fun fact: the back seat has no exit." },
+        { t: "Whatever they pick. We're stopping for fries.", type: "balance", iq: 8, clip: "clips/m5_b.mp4", quip: "Fries: undefeated since forever." },
+        { t: "A list of what the coach got wrong.", type: "control", iq: -6, clip: "clips/m5_c.mp4", quip: "The coach would love your notes. No, really." },
+        { t: "\"I loved watching you play.\" Then quiet.", type: "grateful", iq: 8, clip: "clips/m5_d.mp4", quip: "Six words. Best thing said all day." }
       ]
     }
   ],
