@@ -5,8 +5,9 @@
  * The engine (index.html) never needs to change for new content.
  *
  * Each answer gives 2 points to its `type` and 1 point to its `also` type, if it has one.
- * The result shows the top type and the top three as percentages. `iq` moves the
- * Sideline IQ, which starts at `baseIQ`.
+ * The result shows the top type, the top three as percentages and one blurred bar for the
+ * rest. `iq` moves the Sports Parent IQ, which starts at `baseIQ`. Before the result, the player
+ * enters an email or leaves for the KSNN article for their type (`articles` below).
  *
  * A moment with a `clip` plays video and stops on the question frame; the picked
  * answer plays its own `clip` if it has one. A moment with a `still` is an illustrated
@@ -22,7 +23,7 @@
  */
 window.GAME = {
   baseIQ: 100,
-  shotClock: 20,            // seconds per question (a moment can override)
+  shotClock: 30,            // seconds per question (a moment can override)
 
   // One announcer per visit, picked at random. The woman and the Hispanic anchor go here once their clips exist.
   hosts: [
@@ -33,23 +34,24 @@ window.GAME = {
 
   moments: [
     {
-      time: "8:04 PM", title: "The Walk Back", where: "Saturday, after the final", tone: "dusk",
-      setup: "They lost 2 to 1. The field is empty and one light is still on. Halfway to the car, very quietly:",
+      time: "8:04 PM", title: "The Walk Back", where: "Saturday, after the final game", tone: "dusk",
+      setup: "They lost in an 8 to 0 shutout. Halfway to the car and very quietly:",
       shot: "Empty field at dusk, one light on, your kid stops walking.",
       clip: "clips/m4_setup.mp4", credit: "new clips of the same characters",
       q: "\"I think I might want to quit.\" Your first words?",
+      // Order and answer C from KSNN's notes of 2026-11-19; C has its own clip (calm nod, a yawn, home hand in hand).
       a: [
-        { t: "\"After everything we've paid for?\"", type: "rage", also: "overly", iq: -8, clip: "clips/m4_a.mp4", quip: "The invoice is talking. And it wants a refund." },
         { t: "\"Tell me more. What's stopped being fun?\"", type: "supporter", iq: 8, clip: "clips/m4_b.mp4", quip: "That's a home run. No coaching required." },
-        { t: "\"Thanks for telling me. I've loved every season.\"", type: "grateful", iq: 8, clip: "clips/m4_c.mp4", quip: "That's the kind of win that stays with you." },
-        { t: "\"Whatever you choose, I'm still your biggest fan.\"", type: "cheerleader", iq: 6, clip: "clips/m4_d.mp4", quip: "No uniform needed. You're already on their team." },
+        { t: "\"After everything we've paid for?\"", type: "rage", also: "overly", iq: -8, clip: "clips/m4_a.mp4", quip: "The invoice is talking. And it wants a refund." },
+        { t: "\"Don't make a rushed decision. Sleep on it.\"", type: "balance", also: "mellow", iq: 6, clip: "clips/m4_c.mp4", quip: "Smart call. Nobody makes big decisions after an 8 to 0." },
         { t: "\"I'll talk to the coach. We'll fix this by Monday.\"", type: "overly", iq: -6,
-          stamp: { label: "OVERRULED", sub: "HE DIDN'T ASK", cls: "yellow" }, quip: "Whoa, Coach Mom. He asked for ears, not a task force." }
+          stamp: { label: "OVERRULED", sub: "HE DIDN'T ASK", cls: "yellow" }, quip: "Whoa, Coach Mom. He asked for ears, not a task force." },
+        { t: "\"Whatever you choose, I'm still your biggest fan.\"", type: "cheerleader", iq: 6, clip: "clips/m4_d.mp4", quip: "No uniform needed. You're already on their team." }
       ]
     },
     {
       time: "4:35 PM", title: "The Ride Home", where: "After the game", tone: "dusk",
-      setup: "On the last drive, your son missed the open receiver. The truck is very quiet.",
+      setup: "On the last drive, your son missed the open receiver. The ride home is a bit awkward.",
       shot: "Dad drives one-handed, replaying the play. In the back seat, his son stares out the window.",
       clip: "clips/ride.mp4", still: "stills/ride.jpg", ambience: "car",
       q: "He's waiting to see what you'll say. You...",
@@ -62,13 +64,13 @@ window.GAME = {
           stamp: { label: "GOOD CALL", sub: "TACOS", cls: "green" }, quip: "Tacos. And he's smiling." },
         { t: "\"I loved watching you out there. Want to talk about it, or nah?\"", type: "supporter", also: "grateful", iq: 8, focus: [29, 41, 1.75],
           stamp: { label: "SAFE ZONE", sub: "NO PRESSURE", cls: "green" }, quip: "Perfect answer. And 'nah' is a complete sentence." },
-        { t: "Take that work call. It'll be quick.", type: "phone", iq: -4, focus: [30, 43, 1.5],
-          stamp: { label: "ON HOLD", sub: "WORK CALL", cls: "yellow" }, quip: "Quick call. Long silence. Your co-pilot checked out." }
+        { t: "Remain silent. Surely, the problem will go away.", type: "mellow", iq: -4, focus: [30, 43, 1.6],
+          stamp: { label: "RADIO SILENCE", sub: "AWKWARD", cls: "yellow" }, quip: "Now he's wondering how disappointed you are in him." }
       ]
     },
     {
       time: "6:10 PM", title: "The Yelling Coach", where: "Tuesday practice", tone: "day",
-      setup: "The coach has been on your son for ten minutes. Now he's in his face, finger out, yelling. Your son is a head taller than him and just takes it.",
+      setup: "The coach has been on your son for ten minutes. Now he's yelling in his face, while your son just takes it.",
       shot: "The coach yells up into your son's face. You're at the fence.",
       clip: "clips/coach.mp4", still: "stills/coach.jpg", ambience: "morning", frame: [75, 50],
       q: "Your son looks over at you. What do you do?",
@@ -86,8 +88,8 @@ window.GAME = {
       ]
     },
     {
-      time: "5:10 AM", title: "The Price of the Dream", where: "The ice rink", tone: "morning",
-      setup: "The coach just handed you next season's plan: private lessons, two competitions out of state, a new costume. The total is more than your car.",
+      time: "5:10 AM", title: "The Price of the Dream", where: "Practice before Sunrise", tone: "morning",
+      setup: "The coach just handed you next season's plan: private lessons, two competitions out of state, a new costume. The total cost is more than your car.",
       shot: "A dark rink at dawn. Your daughter, already in skates, waits for your answer.",
       clip: "clips/skating.mp4", still: "stills/skating.jpg", ambience: "rink",
       q: "\"Coach thinks I can make regionals!\" She's waiting for your answer. You...",
@@ -126,8 +128,23 @@ window.GAME = {
     }
   ],
 
-  // Used when the shot clock runs out on a moment without its own timeoutPick.
-  timeout: { type: "phone", iq: -4, quip: "Shot clock ran out. Somewhere, a phone screen lit up." },
+  // Used when the shot clock runs out on a moment without its own timeoutPick. `quip` is the line at the bottom.
+  timeout: { type: "phone", iq: -4, quip: "Time's Up!" },
+
+  // The email screen before the result: an email shows the result, "No thanks" opens KSNN's
+  // article for the player's type. Placeholders (KSNN's home page) until KSNN sends the links.
+  articles: {
+    rage:        "https://ksnn.net/",
+    phone:       "https://ksnn.net/",
+    carcoach:    "https://ksnn.net/",
+    overly:      "https://ksnn.net/",
+    mellow:      "https://ksnn.net/",
+    cheerleader: "https://ksnn.net/",
+    supporter:   "https://ksnn.net/",
+    balance:     "https://ksnn.net/",
+    teamplayer:  "https://ksnn.net/",
+    grateful:    "https://ksnn.net/"
+  },
 
   // Names and `desc` come from KSNN's two charts. `line` sits on the card; `tone` colors it.
   types: {
