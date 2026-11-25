@@ -6,6 +6,7 @@
 <meta name="robots" content="noindex, nofollow" />
 <meta name="theme-color" content="#05080d" />
 <title>Sports Parent IQ</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230d1b2a'/%3E%3Ctext x='32' y='43' font-family='Arial Black,Arial,sans-serif' font-size='28' font-weight='900' text-anchor='middle' fill='%23f5c518'%3EIQ%3C/text%3E%3C/svg%3E" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <!-- the display font loads without holding up the page; the start screen waits for it briefly (see fontsReady) -->
@@ -175,6 +176,9 @@
   .stamp.red { background:var(--red); } .stamp.yellow { background:var(--yellow); color:var(--ink); } .stamp.green { background:var(--green); }
   .stamp.show { animation:slam .45s cubic-bezier(.2,1.6,.4,1) forwards; }
   @keyframes slam { to { transform:translate(-50%,-50%) rotate(-8deg) scale(var(--fit, 1)); opacity:1; } }   /* --fit: see stamp() */
+  .stamp.away { animation:stampAway .45s ease-in forwards; }
+  @keyframes stampAway { from { transform:translate(-50%,-50%) rotate(-8deg) scale(var(--fit, 1)); opacity:1; }
+    to { transform:translate(-50%,-50%) rotate(-8deg) scale(calc(var(--fit, 1) * 1.06)); opacity:0; } }
   .flash { position:absolute; inset:0; z-index:10; pointer-events:none; opacity:0; }
   .flash.red { background:radial-gradient(120% 90% at 50% 50%, rgba(255,40,20,.12) 30%, rgba(226,30,20,.62) 100%); animation:flash .7s ease-out both; }
   .flash.amber { background:radial-gradient(120% 90% at 50% 50%, rgba(245,197,24,0) 40%, rgba(245,150,24,.42) 100%); animation:flash .6s ease-out both; }
@@ -458,7 +462,7 @@
   <div class="wipe" id="wipe" aria-hidden="true"><div class="wb"><div class="wt" id="wipeT"></div></div></div>
 </div>
 
-<script src="content.js?v=20261119"></script><!-- bump with every content change, or browsers keep the old file -->
+<script src="content.js?v=20261125c"></script><!-- bump with every content change, or browsers keep the old file -->
 <script>
 (() => {
   "use strict";
@@ -479,8 +483,71 @@
     bad:  { glow: 'rgba(255,77,58,.45)',  tint: 'rgba(255,77,58,.24)',  accent: '#ff4d3a', bg: 'rgba(255,77,58,.34)' }
   };
   // One announcer per visit, picked at random from the ones in content.js.
+  /* ---------- which files exist ----------
+   * media.json (written by import_to_game.py) lists every clip, still and portrait there is, so a
+   * missing file is never requested and a scene joins the rotation once its clip or still exists.
+   * Without the list every file is tried, and a missing one falls back as before. */
+  let MEDIA = null;
+  const mediaReady = fetch('media.json?t=' + Date.now(), { cache: 'no-store' })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((d) => { if (d && Array.isArray(d.files)) MEDIA = new Set(d.files); })
+    .catch(() => {});
+  const have = (src) => !!src && (!MEDIA || MEDIA.has(String(src).split('?')[0]));
+
+  /* ---------- the visit ----------
+   * G.visit.scenes scenes per visit from all of G.moments. This browser remembers what it played
+   * (most recent last), so a visitor sees every scene once before any repeats, and after that the
+   * longest-unseen come back first. ?scenes=all draws from every scene, ready or not;
+   * ?scenes=ride,coach plays exactly those; ?fresh forgets this browser's history. */
+  const params = new URLSearchParams(location.search);
+  const SEEN = 'spiq.seen';
+  const seenList = () => { try { const v = JSON.parse(localStorage.getItem(SEEN) || '[]'); return Array.isArray(v) ? v : []; } catch (_) { return []; } };
+  const saveSeen = (v) => { try { localStorage.setItem(SEEN, JSON.stringify(v.slice(-100))); } catch (_) {} };
+  if (params.has('fresh')) saveSeen([]);
+  st.returning = seenList().length > 0;                     // played here before: the host says "welcome back"
+  const sceneKey = (m) => m.id || m.title;
+  const shuffle = (arr) => { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
+  const sceneReady = (m) => have(m.clip) || have(m.still) || !!(m.live && have(m.live.clip));
+  function pickVisit() {
+    const per = (G.visit && G.visit.scenes) || 5, want = params.get('scenes');
+    if (want && want !== 'all') {
+      const set = want.split(',').map((id) => G.moments.find((m) => sceneKey(m) === id.trim())).filter(Boolean);
+      if (set.length) return set;
+    }
+    const strict = want !== 'all' && !(G.visit && G.visit.onlyReady === false);
+    let pool = strict ? G.moments.filter(sceneReady) : G.moments.slice();
+    if (!pool.length) pool = G.moments.slice();
+    const seen = seenList();
+    const fresh = shuffle(pool.filter((m) => !seen.includes(sceneKey(m))));
+    const old = seen.map((id) => pool.find((m) => sceneKey(m) === id)).filter(Boolean);   // longest-unseen first
+    // Scenes that share a group (the conflict scenes) never come twice in one visit: a second one
+    // waits for a later visit, and is used only if nothing else is left to fill this one.
+    const order = fresh.concat(old), take = [], held = [], groups = new Set(), want_n = Math.min(per, order.length);
+    for (const m of order) {
+      if (take.length >= want_n) break;
+      if (m.group && groups.has(m.group)) { held.push(m); continue; }
+      if (m.group) groups.add(m.group);
+      take.push(m);
+    }
+    while (take.length < want_n && held.length) take.push(held.shift());
+    return shuffle(take);
+  }
+  function markSeen(m) { const id = sceneKey(m), v = seenList().filter((x) => x !== id); v.push(id); saveSeen(v); }
+  let VISIT = G.moments.slice(0, (G.visit && G.visit.scenes) || 5);   // replaced once media.json is in
+
+  // One announcer per visit, picked at random from those whose intro and verdict clips both exist.
   const HOSTS = (G.hosts && G.hosts.length) ? G.hosts : [{ intro: G.intro, verdict: G.verdict }];
-  st.host = HOSTS[Math.floor(Math.random() * HOSTS.length)];
+  function pickHost() {
+    const ok = HOSTS.filter((h) => h.intro && h.verdict && have(h.intro.clip) && have(h.verdict.clip));
+    const list = ok.length ? ok : HOSTS.slice(0, 1);
+    return list[Math.floor(Math.random() * list.length)];
+  }
+  st.host = HOSTS[0];
+  const visitReady = mediaReady.then(() => { VISIT = pickVisit(); st.host = pickHost(); });
+  // ?debug: a handle for checking the rotation from the console.
+  if (params.has('debug')) window.SPIQ = { visit: () => VISIT.map(sceneKey), pick: () => pickVisit().map(sceneKey), seen: seenList,
+    mark: (id) => { const m = G.moments.find((x) => sceneKey(x) === id); if (m) markSeen(m); }, ready: () => G.moments.filter(sceneReady).map(sceneKey),
+    host: () => HOSTS.indexOf(st.host) };
   const byKey = (pattern, key) => String(pattern).replace('{key}', key);
   const portrait = (key) => byKey(G.portraits || 'types/{key}.jpg', key);
   const world = $('world');
@@ -776,8 +843,8 @@
   }
   function setIQ(value) { st.iq = value; showIQ(value, false); }
   function pips(i) {
-    $('pips').innerHTML = G.moments.map((_, k) => '<i class="' + (k < i ? 'done' : k === i ? 'now' : '') + '"></i>').join('');
-    $('hudMoment').textContent = 'SCENE ' + (i + 1) + ' / ' + G.moments.length;
+    $('pips').innerHTML = VISIT.map((_, k) => '<i class="' + (k < i ? 'done' : k === i ? 'now' : '') + '"></i>').join('');
+    $('hudMoment').textContent = 'SCENE ' + (i + 1) + ' / ' + VISIT.length;
   }
   function caption(text) { const c = $('caption'); if (!text) { c.classList.remove('show'); return; } c.textContent = text; c.classList.add('show'); }
   function popDelta(d) {
@@ -866,6 +933,7 @@
   }
   // Cue a clip at `from` and cut to it. Returns its element, or null when the clip isn't there.
   async function cue(src, from) {
+    if (!have(src)) return null;               // not made yet: the caller falls back without a request
     const el = holder(src);
     if (!(await ready(el))) return null;
     await seek(el, from || 0);
@@ -922,6 +990,7 @@
   }
   // An illustrated scene: the art drifts like a slow camera move, and its camera rig is reset.
   function showStill(src, m) {
+    if (!have(src)) return Promise.resolve(false);
     return new Promise((resolve) => {
       const box = $('still'), img = $('stillImg');
       const done = (ok) => {
@@ -1024,7 +1093,7 @@
     wh.className = 'wh';
     if (wh.parentNode.offsetWidth > room) wh.className = 'wh tight';
     if (wh.parentNode.offsetWidth > room) wh.className = 'wh tight wrap';
-    $('chMo').textContent = 'SCENE ' + (i + 1) + ' OF ' + G.moments.length;
+    $('chMo').textContent = 'SCENE ' + (i + 1) + ' OF ' + VISIT.length;
     $('chN').textContent = m.title;
     $('chS').textContent = m.setup;
     const c = $('chapter'), inMs = calm() ? 0 : 1050;
@@ -1090,25 +1159,28 @@
     if (s.cls !== 'green') SFX.play('whistle', s.cls === 'red');
   }
   function clearStamp() { $('stamp').className = 'stamp'; $('stamp').innerHTML = ''; }
+  // Over a reaction clip the stamp only punctuates the pick, then fades so the faces stay in view.
+  function stampAway() { const el = $('stamp'); if (el.classList.contains('show')) { el.classList.remove('show'); el.classList.add('away'); } }
 
   // Start loading what comes after moment i-1: the next setup, or the verdict and the reveal.
   function preloadNext(i) {
-    const m = G.moments[i];
+    const m = VISIT[i];
     if (m) {
-      if (st.style === 'live' && m.live) holder(m.live.clip);
-      if (m.clip) holder(m.clip);
-      if (m.still) new Image().src = m.still;
+      if (st.style === 'live' && m.live && have(m.live.clip)) holder(m.live.clip);
+      if (have(m.clip)) holder(m.clip);
+      if (have(m.still)) new Image().src = m.still;
       return;
     }
     const key = finalType();
-    if (st.host.verdict) holder(st.host.verdict.clip);
-    if (key && G.reveals) holder(byKey(G.reveals, key));
+    if (st.host.verdict && have(st.host.verdict.clip)) holder(st.host.verdict.clip);
+    if (key && G.reveals && have(byKey(G.reveals, key))) holder(byKey(G.reveals, key));
     if (key) new Image().src = portrait(key);
   }
 
   /* ---------- one moment ---------- */
   async function moment(i) {
-    const m = G.moments[i];
+    const m = VISIT[i];
+    markSeen(m);
     await cover('SCENE ' + (i + 1), 'SPORTS PARENT IQ');
     pips(i);
     $('revealBg').classList.remove('show');
@@ -1119,7 +1191,7 @@
     if (!el && m.clip) { segs = m.setupSegs || [[0]]; el = await cue(m.clip, segs[0][0]); }
     if (el) frameMedia(el, m);
     frameMedia($('stillImg'), m);
-    const ownClip = (a, k) => (alt ? alt.a[k] : a.clip) || null;
+    const ownClip = (a, k) => { const c = (alt ? alt.a[k] : a.clip) || null; return have(c) ? c : null; };
     let scene = false;                                          // an illustrated scene plays instead of video
     if (el) { showSlot(null); hideStill(); }
     else {
@@ -1160,6 +1232,7 @@
       caption(line);
       const p = playSeg(sel, shot.seg);
       setTimeout(() => { if (ans.stamp) stamp(ans.stamp); outcome(ans.iq); }, 380);
+      setTimeout(stampAway, 2300);                              // the stamp lands, then clears the way for the clip
       await Promise.all([p, wait(readMs(line, 3000))]);       // a short clip still leaves its line up long enough to read
       clearStamp();
     } else {
@@ -1207,10 +1280,29 @@
       '<em>' + LOCK + 'Locked</em></div>';
   }
 
+  // Posts the email to G.email.endpoint, tagged with the result, so KSNN's list can sort by type.
+  // No endpoint: nothing leaves the page. Fire and forget: a slow or failed post never holds the result.
+  function sendEmail(email, key) {
+    const cfg = G.email || {};
+    if (!cfg.endpoint) return;
+    const data = Object.assign({}, cfg.extra || {}, {
+      email, type: key, typeName: (G.types[key] && G.types[key].name) || key, iq: st.iq, band: st.band,
+      mix: mix().map((x) => x.key + ':' + x.pct).join(','), scenes: VISIT.map(sceneKey).join(','),
+      page: location.href.split('#')[0], time: new Date().toISOString(),
+    });
+    try {
+      const opts = cfg.format === 'form'
+        ? { method: 'POST', mode: 'no-cors', body: new URLSearchParams(data), keepalive: true }
+        : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), keepalive: true };
+      if (window.AbortController) { const ctl = new AbortController(); opts.signal = ctl.signal; setTimeout(() => ctl.abort(), 8000); }
+      fetch(cfg.endpoint, opts).catch(() => {});
+    } catch (_) {}
+  }
+
   /* ---------- the email screen before the reveal ----------
    * Resolves once a valid email is in. "No thanks" opens KSNN's article for the player's type instead
-   * (content.js `articles`), in the same tab, or the whole page when the game is embedded.
-   * Demo: the email stays in this page; the site integration sends it to KSNN's mailing list. */
+   * (content.js `articles`), in the same tab, or the whole page when the game is embedded. The email
+   * goes to content.js `email.endpoint` when one is set (sendEmail above). */
   function gate(key) {
     return new Promise((resolve) => {
       const g = $('gate'), form = $('gateForm'), input = $('email'), err = $('gateErr'), skip = $('gateSkip');
@@ -1230,6 +1322,7 @@
           return;
         }
         st.email = v;
+        sendEmail(v, key);
         form.onsubmit = null; input.oninput = null;
         input.blur();
         SFX.play('good'); buzz(20);
@@ -1242,7 +1335,7 @@
   async function result(opts) {
     const quick = !!(opts && opts.quick);
     await cover('FULL TIME', 'FINAL WHISTLE');
-    pips(G.moments.length);
+    pips(VISIT.length);
     $('hudMoment').textContent = 'FINAL WHISTLE';
     showSlot(null); hideStill();
     const key = finalType(), T = G.types[key], tn = tone(key), good = tn !== 'bad';
@@ -1339,8 +1432,11 @@
   }
 
   /* ---------- the host opens the show (first run only) ---------- */
+  // A returning visitor hears the host's "welcome back" when that clip exists, the intro otherwise.
+  const introClip = () => (st.returning && st.host.back && have(st.host.back.clip) ? st.host.back : st.host.intro);
   async function intro() {
-    const el = st.host.intro && await cue(st.host.intro.clip, 0);
+    const ic = introClip();
+    const el = ic && await cue(ic.clip, 0);
     if (!el) return;
     showSlot(null); hideStill();
     $('hud').classList.add('off');
@@ -1371,12 +1467,14 @@
   async function run() {
     if (st.busy) return; st.busy = true;
     await cover('KICKOFF', 'SPORTS PARENT IQ');
+    await visitReady;
+    if (st.played) { VISIT = pickVisit(); st.host = pickHost(); }   // "Play again": new scenes, maybe a new host
     reset();
     st.tally = {}; st.order = []; st.card = null; setIQ(G.baseIQ);
     $('start').classList.add('hidden');
     if (!st.played) await intro();
     st.played = true;
-    for (let i = 0; i < G.moments.length; i++) await moment(i);
+    for (let i = 0; i < VISIT.length; i++) await moment(i);
     st.shown = st.style;
     await result();
     st.busy = false;
@@ -1509,12 +1607,12 @@
     }).join('');
     $('mosaic').querySelectorAll('img').forEach((im) => im.addEventListener('error', () => im.parentNode.classList.add('gone')));
   }
-  const exists = async (url) => { try { return (await fetch(url, { method: 'HEAD' })).ok; } catch (_) { return false; } };
-  // The style switch shows only when a moment's live-action clips are there.
-  async function detectLive() {
-    for (let k = 0; k < G.moments.length && st.liveIdx == null; k++) {
-      const m = G.moments[k];
-      if (m.live && await exists(m.live.clip)) st.liveIdx = k;
+  // The style switch shows only when a scene in this visit has its live-action clips.
+  function detectLive() {
+    st.liveIdx = null;
+    for (let k = 0; k < VISIT.length && st.liveIdx == null; k++) {
+      const m = VISIT[k];
+      if (m.live && have(m.live.clip)) st.liveIdx = k;
     }
     if (st.liveIdx != null) {
       $('styles').querySelector('span').textContent = 'SCENE ' + (st.liveIdx + 1) + ' IN';
@@ -1553,13 +1651,15 @@
   $('playBtn').addEventListener('click', start);
   $('again').addEventListener('click', start);
   $('compare').addEventListener('click', () => { unlock(); replay(st.liveIdx, st.shown === 'live' ? 'pixar' : 'live'); });
-  setIQ(G.baseIQ); pips(0); $('hudMoment').textContent = 'GAME DAY';
+  setIQ(G.baseIQ); $('hudMoment').textContent = 'GAME DAY';
   buildMosaic();
-  (async () => {                               // a poster frame behind the start screen, then the intro starts loading
-    for (const m of G.moments) if (m.clip && await cue(m.clip, (m.setupSegs || [[0]])[0][0])) break;
-    if (st.host.intro) holder(st.host.intro.clip);
-  })();
-  detectLive();
+  visitReady.then(async () => {                // a poster frame behind the start screen, then the intro starts loading
+    pips(0); $('hudMoment').textContent = 'GAME DAY';
+    detectLive();
+    for (const m of VISIT) if (await cue(m.clip, (m.setupSegs || [[0]])[0][0])) break;
+    const ic = introClip();
+    if (ic && have(ic.clip)) holder(ic.clip);
+  });
 })();
 </script>
 </body>
