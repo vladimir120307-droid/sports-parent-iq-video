@@ -94,6 +94,19 @@
   .hud { position:absolute; top:0; left:0; right:0; padding:calc(10px + env(safe-area-inset-top)) 14px 26px; display:flex; align-items:flex-start; justify-content:space-between; gap:10px;
     background:linear-gradient(to bottom, rgba(0,0,0,.66), rgba(0,0,0,0)); z-index:5; transition:opacity .3s; }
   .hud.off { opacity:0; }
+  .hudr { display:flex; align-items:flex-start; gap:10px; }
+  .pausebtn { width:34px; height:34px; flex:0 0 34px; margin-top:3px; padding:0; border-radius:50%; border:1px solid rgba(255,255,255,.3); background:rgba(10,18,30,.45);
+    backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); display:flex; align-items:center; justify-content:center; gap:4px; cursor:pointer; }
+  .pausebtn i { width:4px; height:13px; border-radius:1.5px; background:#fff; }
+  .hud.off .pausebtn { pointer-events:none; }
+  .pausecover { position:absolute; inset:0; z-index:12; display:none; flex-direction:column; align-items:center; justify-content:center; gap:10px; cursor:pointer;
+    background:rgba(5,8,13,.6); backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); }
+  .pausecover.on { display:flex; }
+  .pausecover .resume { position:relative; width:84px; height:84px; border:0; border-radius:50%; background:var(--yellow); cursor:pointer; box-shadow:0 10px 30px rgba(0,0,0,.45); }
+  .pausecover .resume::after { content:''; position:absolute; left:33px; top:26px; border-style:solid; border-width:16px 0 16px 26px; border-color:transparent transparent transparent var(--ink); }
+  .pausecover .pl { font-family:var(--cond); font-weight:900; font-style:italic; font-size:34px; letter-spacing:.04em; }
+  .pausecover .ps { font-size:11px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; opacity:.8; }
+  .stage.paused *, .stage.paused *::before, .stage.paused *::after { animation-play-state:paused !important; }
   .brand { font-family:var(--cond); font-weight:900; font-style:italic; letter-spacing:.04em; font-size:18px; line-height:1; text-shadow:0 2px 8px rgba(0,0,0,.5); }
   .brand b { color:var(--yellow); }
   .brand small { display:block; font-family:var(--ui); font-style:normal; font-weight:800; opacity:.82; letter-spacing:.14em; font-size:9.5px; margin-top:4px; }
@@ -372,7 +385,10 @@
 
   <div class="hud" id="hud">
     <div class="brand">SPORTS PARENT <b>IQ</b><small id="hudMoment">GAME DAY</small><div class="pips" id="pips"></div></div>
-    <div class="iq"><div class="lbl">SPORTS PARENT IQ</div><div class="num" id="iqNum">100</div><div class="bar"><div class="fill" id="iqFill"></div></div></div>
+    <div class="hudr">
+      <button class="pausebtn" id="pauseBtn" type="button" aria-label="Pause" aria-pressed="false"><i></i><i></i></button>
+      <div class="iq"><div class="lbl">SPORTS PARENT IQ</div><div class="num" id="iqNum">100</div><div class="bar"><div class="fill" id="iqFill"></div></div></div>
+    </div>
   </div>
   <div class="delta" id="delta"></div>
 
@@ -401,6 +417,11 @@
   <div class="stamp" id="stamp"></div>
   <div class="lower" id="lower"><div class="k">YOUR SIDELINE TYPE</div><div class="n" id="lowerName"></div></div>
   <button class="skip" id="skip">Skip ›</button>
+  <div class="pausecover" id="pauseCover" role="dialog" aria-label="Paused">
+    <button class="resume" id="resumeBtn" type="button" aria-label="Resume"></button>
+    <div class="pl">PAUSED</div>
+    <div class="ps">Tap to keep playing</div>
+  </div>
 
   <div class="screen start" id="start">
     <div class="mwrap" aria-hidden="true"><div class="mosaic" id="mosaic"></div></div>
@@ -465,12 +486,20 @@
   <div class="wipe" id="wipe" aria-hidden="true"><div class="wb"><div class="wt" id="wipeT"></div></div></div>
 </div>
 
-<script src="content.js?v=20261125c"></script><!-- bump with every content change, or browsers keep the old file -->
+<script src="content.js?v=20261127vo"></script><!-- bump with every content change, or browsers keep the old file -->
 <script>
 (() => {
   "use strict";
   const G = window.GAME, $ = (id) => document.getElementById(id);
-  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  // Pause (the button by the IQ counter, or P / Esc): game time stops, so the shot clock, every wait
+  // and the scene cards hold where they are, while the clips and the sound freeze (setPause below).
+  const PAUSE = { on: false, since: 0, total: 0, vids: null };
+  const gameNow = () => performance.now() - PAUSE.total - (PAUSE.on ? performance.now() - PAUSE.since : 0);
+  const wait = (ms) => new Promise((r) => {
+    const end = gameNow() + ms;
+    const step = () => { const left = end - gameNow(); if (left <= 0) r(); else setTimeout(step, PAUSE.on ? 120 : Math.min(left, 200)); };
+    setTimeout(step, Math.min(ms, 200));
+  });
   // The stage never scrolls (see .stage in the CSS); this catches browsers without overflow:clip.
   const stageEl = document.querySelector('.stage');
   stageEl.addEventListener('scroll', () => { if (stageEl.scrollTop || stageEl.scrollLeft) stageEl.scrollTo(0, 0); });
@@ -553,6 +582,27 @@
     host: () => HOSTS.indexOf(st.host) };
   const byKey = (pattern, key) => String(pattern).replace('{key}', key);
   const portrait = (key) => byKey(G.portraits || 'types/{key}.jpg', key);
+  // Scene-card reads (hosts[].vo): the visit's announcer, or the first one's when this host has none.
+  const voEl = new Audio();
+  voEl.preload = 'auto';
+  const voSrc = (key) => {
+    const of = (h) => (h && h.vo ? byKey(h.vo, key) : null);
+    const own = of(st.host), first = of(HOSTS[0]);
+    return have(own) ? own : have(first) ? first : null;
+  };
+  // Plays one read; true once it ends, false if it can't play or is stopped.
+  function playVo(src) {
+    return new Promise((resolve) => {
+      if (voEl._done) voEl._done(false);
+      const done = (ok) => { if (voEl._done !== done) return; voEl._done = null; voEl.onended = voEl.onerror = null; resolve(ok); };
+      voEl._done = done;
+      voEl.onended = () => done(true);
+      voEl.onerror = () => done(false);
+      voEl.src = src;
+      voEl.play().catch(() => done(false));
+    });
+  }
+  function stopVo() { voEl.pause(); if (voEl._done) voEl._done(false); }
   const world = $('world');
   // Reduced motion: no confetti, shake, wipes, count-ups or tilt; CSS stills the rest.
   const motionQ = window.matchMedia ? matchMedia('(prefers-reduced-motion: reduce)') : null;
@@ -565,7 +615,7 @@
    * Every sound is built from plain WebAudio nodes on whatever context it is handed, so the same code
    * plays live and renders offline (the walkthrough recorder uses SPIQ_render for its soundtrack). ---------- */
   const SFX = (() => {
-    let ac = null, out = null, amb = null;
+    let ac = null, out = null, amb = null, held = false;
     const noiseBufs = new WeakMap();
     // Mix levels, set by measuring each rendered sound against the clips (about -18 LUFS): UI cues sit
     // 8 to 15 LU under the dialogue, scene ambience about 12 LU under it.
@@ -586,7 +636,7 @@
           if (!A) return null;
           ac = new A(); out = ac.createGain(); out.gain.value = 0.5; out.connect(ac.destination);
         }
-        if (ac.state === 'suspended') ac.resume().catch(() => {});
+        if (ac.state === 'suspended' && !held) ac.resume().catch(() => {});
         return ac;
       } catch (_) { return null; }
     }
@@ -721,6 +771,12 @@
         tell({ name, arg });
         const c = ctx(); if (!c || !S[name]) return;
         try { S[name](c, bus(c, out, name, arg), c.currentTime + 0.01, arg); } catch (_) {}
+      },
+      // Pause: every cue and the ambience stop where they are, and pick up from there.
+      hold(on) {
+        held = !!on;
+        if (!ac) return;
+        try { if (held) ac.suspend(); else ac.resume(); } catch (_) {}
       },
       // Scene ambience on its own fader: ambient('morning') starts it, ambient(null) fades it out.
       ambient(kind) {
@@ -964,6 +1020,7 @@
       if (el._stop) el._stop();
       el._stop = finish;
       await seek(el, a);
+      while (PAUSE.on && !done) await wait(50);               // a clip never starts under the pause cover
       if (done) return;
       el.addEventListener('timeupdate', check);
       el.addEventListener('ended', finish);
@@ -982,6 +1039,9 @@
     if (unlocked) return;
     unlocked = true;
     for (const el of pool) { const p = el.play(); if (p) p.catch(() => {}); el.pause(); }
+    // The scene-card reads play on their own element, which a phone also wants unlocked by this tap.
+    const first = voSrc('scene1');
+    if (first) { voEl.muted = true; voEl.src = first; voEl.play().then(() => { voEl.pause(); voEl.muted = false; }, () => { voEl.muted = false; }); }
   }
 
   /* ---------- scenes ---------- */
@@ -1042,13 +1102,16 @@
   // second plus a beat to find it, never under `min`. No text leaves the screen before it can be read.
   const readMs = (text, min) => Math.max(min, 800 + String(text || '').length * 50);
   // Waits `full` ms; once `min` ms have passed, a tap on the stage (or Space or Enter) moves on sooner.
-  function holdOrTap(min, full) {
+  // `until` (optional) ends the hold early too, e.g. when the announcer finishes reading the card.
+  function holdOrTap(min, full, until) {
     return new Promise((resolve) => {
-      const t0 = performance.now();
-      const done = () => { clearTimeout(timer); stageEl.removeEventListener('pointerdown', tap); document.removeEventListener('keydown', key); resolve(); };
-      const tap = () => { if (performance.now() - t0 >= min) done(); };
+      const t0 = gameNow();
+      let over = false;
+      const done = () => { if (over) return; over = true; stageEl.removeEventListener('pointerdown', tap); document.removeEventListener('keydown', key); resolve(); };
+      const tap = () => { if (!PAUSE.on && gameNow() - t0 >= min) done(); };
       const key = (e) => { if (e.key === ' ' || e.key === 'Enter') tap(); };
-      const timer = setTimeout(done, full);
+      wait(full).then(done);
+      if (until) until.then(done);
       stageEl.addEventListener('pointerdown', tap);
       document.addEventListener('keydown', key);
     });
@@ -1102,7 +1165,23 @@
     const c = $('chapter'), inMs = calm() ? 0 : 1050;
     c.classList.remove('out');
     c.classList.add('show');
-    await holdOrTap(inMs + 3000, inMs + readMs(m.setup, 3000));
+    // The visit's announcer reads the card: "Scene N of five", then the card. It stays up for the read
+    // (or its reading time if the read can't play), and a tap after the minimum skips both.
+    const num = voSrc('scene' + (i + 1)), card = voSrc(m.id);
+    if (card) {
+      let live = true;                                       // a skip stops the read, and nothing after it starts
+      const reading = (async () => {
+        await wait(Math.round(inMs * 0.6));
+        if (live && num && await playVo(num)) await wait(220);
+        if (live && !(await playVo(card))) await wait(readMs(m.setup, 3000));
+        if (live) await wait(450);
+      })();
+      await holdOrTap(inMs + 3000, 120000, reading);
+      live = false;
+      stopVo();
+    } else {
+      await holdOrTap(inMs + 3000, inMs + readMs(m.setup, 3000));
+    }
     c.classList.add('out');
     await wait(300);
     c.classList.remove('show', 'out');
@@ -1114,7 +1193,7 @@
       $('q').textContent = m.q;
       $('opts').innerHTML = m.a.map((a, k) => '<button class="opt" style="--i:' + k + '" data-k="' + k + '"><span class="k">' + 'ABCDE'[k] + '</span><span>' + esc(a.t) + '</span></button>').join('');
       $('opts').classList.toggle('five', m.a.length > 4);
-      const secs = m.shotClock || G.shotClock, ring = $('ring'), clock = $('clock'), C = 150.8, t0 = performance.now();
+      const secs = m.shotClock || G.shotClock, ring = $('ring'), clock = $('clock'), C = 150.8, t0 = gameNow();
       let settled = false, lastSec = secs;
       const settle = (idx, timedOut) => {
         if (settled) return; settled = true;
@@ -1126,7 +1205,7 @@
         setTimeout(() => { $('choices').classList.remove('show'); resolve({ idx, timedOut }); }, 460);
       };
       const timer = setInterval(() => {
-        const left = Math.max(0, secs - (performance.now() - t0) / 1000), sec = Math.ceil(left);
+        const left = Math.max(0, secs - (gameNow() - t0) / 1000), sec = Math.ceil(left);
         $('clockT').textContent = sec;
         ring.style.strokeDashoffset = String(C * (1 - left / secs));
         if (left < 3 && !clock.classList.contains('hot')) { clock.classList.add('hot'); ring.style.stroke = '#ff4d3a'; $('hotedge').classList.add('on'); }
@@ -1137,6 +1216,7 @@
         if (left <= 0) settle(m.timeoutPick != null ? m.timeoutPick : -1, true);
       }, 50);
       const onKey = (e) => {                    // A-E or 1-5 on a keyboard
+        if (PAUSE.on) return;
         const k = 'abcde'.indexOf(String(e.key).toLowerCase()), n = '12345'.indexOf(e.key), idx = k >= 0 ? k : n;
         if (idx >= 0 && idx < m.a.length) settle(idx, false);
       };
@@ -1176,11 +1256,55 @@
       el.style.transition = 'transform ' + dur.toFixed(2) + 's linear';
       void el.offsetWidth;
       el.style.transform = 'scale(1.04)';
+      el._look = true;                                       // a pause holds the push-in where it is
     }
     const onTime = () => { if (el.currentTime >= dur - TAIL_S) { world.classList.add('tail'); el.removeEventListener('timeupdate', onTime); } };
     el.addEventListener('timeupdate', onTime);
-    return () => el.removeEventListener('timeupdate', onTime);
+    return () => { el._look = false; el.removeEventListener('timeupdate', onTime); };
   }
+  // The push-in is a CSS transition, which can't pause: hold its current scale, then finish the
+  // rest of it over the time the clip has left.
+  function holdLook(el) { const now = getComputedStyle(el).transform; el.style.transition = 'none'; el.style.transform = now; }
+  function thawLook(el) {
+    const left = Math.max(0.1, (el.duration || 8) - el.currentTime);
+    el.style.transition = 'transform ' + left.toFixed(2) + 's linear';
+    void el.offsetWidth;
+    el.style.transform = 'scale(1.04)';
+  }
+  function setPause(on) {
+    if (on === PAUSE.on) return;
+    if (on) {
+      PAUSE.on = true; PAUSE.since = performance.now();
+      PAUSE.vids = pool.filter((v) => !v.paused && !v.ended);   // st.loopStop's reveal loop has no segment, so it's kept here
+      PAUSE.vids.forEach((v) => { if (v._look) holdLook(v); v.pause(); });
+      PAUSE.vo = !voEl.paused && !!voEl._done;                // a scene-card read stops mid-word too
+      if (PAUSE.vo) voEl.pause();
+      SFX.hold(true);
+      stageEl.classList.add('paused');
+      $('pauseCover').classList.add('on');
+      $('pauseBtn').setAttribute('aria-pressed', 'true');
+    } else {
+      PAUSE.total += performance.now() - PAUSE.since; PAUSE.on = false;
+      $('pauseCover').classList.remove('on');
+      stageEl.classList.remove('paused');
+      $('pauseBtn').setAttribute('aria-pressed', 'false');
+      SFX.hold(false);
+      // Every clip that is mid-segment plays on, including one the browser stopped while the page was hidden.
+      pool.forEach((v) => { if ((v._stop || PAUSE.vids.includes(v)) && v.paused && !v.ended) { if (v._look) thawLook(v); v.play().catch(() => {}); } });
+      if (PAUSE.vo && voEl._done) voEl.play().catch(() => {});
+      PAUSE.vids = null; PAUSE.vo = false;
+    }
+  }
+  // Leaving the page (another app, another tab, a locked phone) pauses the game, so it waits on the
+  // pause cover instead of on a clip the browser stopped. And if a browser ever stops the playing clip
+  // on its own, it is started again rather than leaving the game waiting for an end that never comes.
+  document.addEventListener('visibilitychange', () => { if (document.hidden && canPause()) setPause(true); });
+  setInterval(() => {
+    if (PAUSE.on || document.hidden || !top._stop || !top.paused || top.ended) return;
+    top.play().catch(() => {});
+  }, 1000);
+  // Pausing only makes sense mid-game: not on the start screen, the email step or the result card.
+  const canPause = () => st.busy && !$('hud').classList.contains('off');
   function clearLook() { world.classList.remove('tail'); $('vignette').classList.remove('deep'); }
 
   // Start loading what comes after moment i-1: the next setup, or the verdict and the reveal.
@@ -1476,6 +1600,8 @@
 
   /* ---------- run ---------- */
   function reset() {
+    setPause(false);
+    stopVo();
     st.cardToken = (st.cardToken || 0) + 1;
     if (st.loopStop) { st.loopStop(); st.loopStop = null; }
     pool.forEach((el) => { el.muted = false; el.loop = false; });
@@ -1676,6 +1802,18 @@
   const start = () => { unlock(); run(); };
   $('playBtn').addEventListener('click', start);
   $('again').addEventListener('click', start);
+  // Pause: the button by the IQ counter, P or Esc; a tap anywhere (or P, Esc, Space, Enter) resumes.
+  // Their pointerdown never reaches the stage, so a pause or resume tap can't also skip a scene card.
+  ['pauseBtn', 'pauseCover'].forEach((id) => $(id).addEventListener('pointerdown', (e) => e.stopPropagation()));
+  $('pauseBtn').addEventListener('click', () => { if (canPause()) setPause(true); });
+  $('pauseCover').addEventListener('click', () => setPause(false));
+  document.addEventListener('keydown', (e) => {
+    const k = String(e.key).toLowerCase(), toggle = k === 'p' || k === 'escape';
+    if (PAUSE.on ? (toggle || k === ' ' || k === 'enter') : (toggle && canPause())) {
+      e.preventDefault(); e.stopImmediatePropagation();
+      setPause(!PAUSE.on);
+    }
+  }, true);
   $('compare').addEventListener('click', () => { unlock(); replay(st.liveIdx, st.shown === 'live' ? 'pixar' : 'live'); });
   setIQ(G.baseIQ); $('hudMoment').textContent = 'GAME DAY';
   buildMosaic();

@@ -35,10 +35,12 @@ window.GAME = {
 
   // One announcer per visit, picked at random from those whose intro and verdict clips exist.
   // `back` is the "welcome back" intro for a returning visitor; without it they hear the intro.
+  // `vo` is the announcer reading each scene card: {key} is "scene1".."scene5" for "Scene N of five",
+  // then the moment's id for the card itself. A host without a read uses the first host's.
   hosts: [
-    { intro: { clip: "clips/host_intro.mp4" }, verdict: { clip: "clips/host_verdict.mp4" }, back: { clip: "clips/host_back.mp4" } },
-    { intro: { clip: "clips/host_woman_intro.mp4" }, verdict: { clip: "clips/host_woman_verdict.mp4" }, back: { clip: "clips/host_woman_back.mp4" } },
-    { intro: { clip: "clips/host_latino_intro.mp4" }, verdict: { clip: "clips/host_latino_verdict.mp4" }, back: { clip: "clips/host_latino_back.mp4" } }
+    { intro: { clip: "clips/host_intro.mp4" }, verdict: { clip: "clips/host_verdict.mp4" }, back: { clip: "clips/host_back.mp4" }, vo: "vo/host_{key}.m4a" },
+    { intro: { clip: "clips/host_woman_intro.mp4" }, verdict: { clip: "clips/host_woman_verdict.mp4" }, back: { clip: "clips/host_woman_back.mp4" }, vo: "vo/host_woman_{key}.m4a" },
+    { intro: { clip: "clips/host_latino_intro.mp4" }, verdict: { clip: "clips/host_latino_verdict.mp4" }, back: { clip: "clips/host_latino_back.mp4" }, vo: "vo/host_latino_{key}.m4a" }
   ],
   portraits: "types/{key}.jpg",                  // KSNN's own art for each type
   reveals: "clips/reveal_{key}.mp4",             // each type's reveal clip, looped and muted behind the result
