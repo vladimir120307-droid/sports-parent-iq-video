@@ -590,7 +590,9 @@
     const own = of(st.host), first = of(HOSTS[0]);
     return have(own) ? own : have(first) ? first : null;
   };
-  // Plays one read; true once it ends, false if it can't play or is stopped.
+  // Plays one read; true once it ends, false if it can't play or is stopped. It never starts under the
+  // pause cover, and a pause that lands while the file is still loading (the browser then rejects
+  // play() as aborted) is not a failure: the resume plays it.
   function playVo(src) {
     return new Promise((resolve) => {
       if (voEl._done) voEl._done(false);
@@ -598,8 +600,17 @@
       voEl._done = done;
       voEl.onended = () => done(true);
       voEl.onerror = () => done(false);
-      voEl.src = src;
-      voEl.play().catch(() => done(false));
+      const start = () => {
+        if (voEl._done !== done) return;
+        voEl.src = src;
+        voEl.play().catch((e) => {
+          if (voEl._done !== done) return;                      // stopped or replaced meanwhile
+          if (PAUSE.on) { PAUSE.vo = true; return; }             // the resume plays it
+          if (e && e.name === 'AbortError') { voEl.play().catch(() => done(false)); return; }
+          done(false);
+        });
+      };
+      if (PAUSE.on) wait(1).then(start); else start();           // wait(1) only passes once the game runs again
     });
   }
   function stopVo() { voEl.pause(); if (voEl._done) voEl._done(false); }
@@ -1024,7 +1035,9 @@
       if (done) return;
       el.addEventListener('timeupdate', check);
       el.addEventListener('ended', finish);
-      el.play().catch(() => { el.muted = true; el.play().catch(finish); });
+      // An aborted play() (a pause landing while the clip still loads) is left to the resume and the
+      // watchdog; only a refusal of sound falls back to playing muted.
+      el.play().catch((e) => { if (PAUSE.on || (e && e.name === 'AbortError')) return; el.muted = true; el.play().catch(finish); });
       requestAnimationFrame(tick);
     });
   }
