@@ -1327,6 +1327,8 @@
       if (st.style === 'live' && m.live && have(m.live.clip)) holder(m.live.clip);
       if (have(m.clip)) holder(m.clip);
       if (have(m.still)) new Image().src = m.still;
+      // The next card's reads go into the browser cache now, so the announcer starts on cue.
+      [voSrc('scene' + (i + 1)), voSrc(m.id)].forEach((u) => { if (u) fetch(u).catch(() => {}); });
       return;
     }
     const key = finalType();
@@ -1635,6 +1637,7 @@
     await visitReady;
     if (st.played) { VISIT = pickVisit(); st.host = pickHost(); }   // "Play again": new scenes, maybe a new host
     reset();
+    if (VISIT[0]) [voSrc('scene1'), voSrc(VISIT[0].id)].forEach((u) => { if (u) fetch(u).catch(() => {}); });   // the first card's reads, during the intro
     st.tally = {}; st.order = []; st.card = null; setIQ(G.baseIQ);
     $('start').classList.add('hidden');
     if (!st.played) await intro();
