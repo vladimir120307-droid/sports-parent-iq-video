@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Sports Parent IQ: all scenes and reactions</title>
+<style>
+  :root { --bg: #111317; --card: #1b1e24; --line: #2a2e36; --text: #e8eaee; --muted: #9aa1ad; --accent: #f5c542; --good: #3ecf8e; --bad: #ff6b6b; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { position: sticky; top: 0; z-index: 5; background: rgba(17,19,23,.96); border-bottom: 1px solid var(--line); padding: 12px 16px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; }
+  header .stat { color: var(--muted); }
+  header select { background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
+  .intro { color: var(--muted); padding: 12px 16px 0; margin: 0; }
+  main { padding: 8px 16px 48px; }
+  section { border-bottom: 1px solid var(--line); padding: 16px 0; }
+  section h2 { font-size: 15px; margin: 0 0 2px; }
+  section .q { color: var(--muted); margin: 0 0 10px; }
+  .row { display: grid; grid-template-columns: repeat(6, minmax(150px, 1fr)); gap: 10px; }
+  @media (max-width: 1100px) { .row { grid-template-columns: repeat(3, minmax(150px, 1fr)); } }
+  @media (max-width: 560px) { .row { grid-template-columns: repeat(2, minmax(140px, 1fr)); } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
+  .card video { width: 100%; aspect-ratio: 9 / 16; background: #000; display: block; }
+  .meta { padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+  .code { font: 12px ui-monospace, Consolas, monospace; color: var(--muted); display: flex; justify-content: space-between; gap: 6px; }
+  .iq.pos { color: var(--good); } .iq.neg { color: var(--bad); }
+  .t { font-weight: 600; }
+  .scene .t { color: var(--muted); font-weight: 500; }
+  .stamp { font-size: 12px; color: var(--accent); }
+  .quip { font-size: 12px; color: var(--muted); }
+  .err { padding: 24px; color: var(--bad); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Sports Parent IQ: all scenes and reactions</h1>
+  <span class="stat" id="stat"></span>
+  <label>Scene <select id="jump"><option value="">all</option></select></label>
+</header>
+<p class="intro">Every scene and the reaction clip for each answer, in one place. Each card has a code (for example coach_c) to use in notes. The game itself is at <a href="./" style="color:inherit">the main page</a>.</p>
+<main id="main"></main>
+<script src="content.js" onerror="document.getElementById('main').innerHTML='<div class=err>Could not load the game content.</div>'"></script>
+<script>
+  const main = document.getElementById("main");
+  const jump = document.getElementById("jump");
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const codeOf = (clip) => (clip || "").split("/").pop().replace(/\.mp4$/, "");
+
+  function card(src, html, extra) {
+    const el = document.createElement("div");
+    el.className = "card" + (extra ? " " + extra : "");
+    el.innerHTML = `<video controls preload="metadata" playsinline src="${esc(src)}"></video><div class="meta">${html}</div>`;
+    return el;
+  }
+
+  function render() {
+    if (!window.GAME) return;
+    main.innerHTML = "";
+    let shown = 0, total = 0;
+    for (const m of window.GAME.moments) {
+      const answers = m.a.filter((a) => a.clip);
+      total += answers.length;
+      if (jump.value && jump.value !== m.id) continue;
+      const sec = document.createElement("section");
+      sec.id = m.id;
+      sec.innerHTML = `<h2>${esc(m.title)} <span class="stat">· ${esc(m.id)}</span></h2><p class="q">${esc(m.q)}</p>`;
+      const row = document.createElement("div");
+      row.className = "row";
+      if (m.clip) row.appendChild(card(m.clip, `<div class="code"><span>${esc(codeOf(m.clip))}</span></div><div class="t">scene</div><div class="quip">${esc(m.setup || "")}</div>`, "scene"));
+      for (const a of answers) {
+        const iq = typeof a.iq === "number" ? `<span class="iq ${a.iq >= 0 ? "pos" : "neg"}">IQ ${a.iq > 0 ? "+" : ""}${a.iq}</span>` : "";
+        const stamp = a.stamp ? `<div class="stamp">${esc(a.stamp.label)}${a.stamp.sub ? " · " + esc(a.stamp.sub) : ""}</div>` : "";
+        row.appendChild(card(a.clip, `<div class="code"><span>${esc(codeOf(a.clip))}</span>${iq}</div><div class="t">${esc(a.t)}</div>${stamp}<div class="quip">${esc(a.quip || "")}</div>`));
+        shown++;
+      }
+      sec.appendChild(row);
+      main.appendChild(sec);
+    }
+    document.getElementById("stat").textContent = `${window.GAME.moments.length} scenes, ${total} reactions`;
+  }
+
+  if (window.GAME) {
+    for (const m of window.GAME.moments) jump.insertAdjacentHTML("beforeend", `<option value="${esc(m.id)}">${esc(m.title)}</option>`);
+    render();
+  }
+  jump.addEventListener("change", render);
+  document.addEventListener("play", (e) => { for (const v of document.querySelectorAll("video")) if (v !== e.target) v.pause(); }, true);
+</script>
+</body>
+</html>
